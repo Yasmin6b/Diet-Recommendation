@@ -1,10 +1,13 @@
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 from sqlalchemy import Enum as SqlEnum
 import os
+
+# Import db instance from meal_model
+from models.meal_model import db
+from routes.meal_routes import meal_bp
 
 # Load environment variables
 load_dotenv()
@@ -12,10 +15,13 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 
+# Register blueprints
+app.register_blueprint(meal_bp)
+
 # Get DB config from .env
 db_user = os.getenv('DB_USER')
 db_pass = os.getenv('DB_PASS')
-db_host = os.getenv('DB_HOST')
+db_host = '127.0.0.1'  # Using IP instead of localhost
 db_name = os.getenv('DB_NAME')
 db_port = os.getenv('DB_PORT', '3306')
 
@@ -25,7 +31,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 
-db = SQLAlchemy(app)
+# Initialize the db with the Flask app
+db.init_app(app)
 
 class User(db.Model):
     __tablename__ = 'user'
