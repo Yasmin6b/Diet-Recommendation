@@ -3,33 +3,46 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, text
+from sqlalchemy import Enum as SqlEnum
 import os
 
 # Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+CORS(app)
 
-# First connect to MySQL without database to create it if needed
-engine = create_engine('mysql+pymysql://root:@localhost/')
-with engine.connect() as conn:
-    conn.execute(text('CREATE DATABASE IF NOT EXISTS flask_react_db'))
-    conn.commit()
+# Get DB config from .env
+db_user = os.getenv('DB_USER')
+db_pass = os.getenv('DB_PASS')
+db_host = os.getenv('DB_HOST')
+db_name = os.getenv('DB_NAME')
+db_port = os.getenv('DB_PORT', '3306')
 
-# Configure MySQL connection
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'mysql+pymysql://root:@localhost/flask_react_db')
+# Construct DB URI
+db_url = f'mysql+pymysql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}'
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 
 db = SQLAlchemy(app)
 
 class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    first_name = db.Column(db.String(80), nullable=False)
-    last_name = db.Column(db.String(80), nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
+    __tablename__ = 'user'
+
+    idUser = db.Column(db.Integer, primary_key=True)
+    nom = db.Column(db.String(50), nullable=False)
+    prenom = db.Column(db.String(50), nullable=False)
+    email = db.Column(db.String(100), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    age = db.Column(db.Integer)
+    taille = db.Column(db.Numeric(4, 2))
+    poids = db.Column(db.Numeric(5, 2))
+    objectif = db.Column(db.String(100))
+    sexe = db.Column(SqlEnum('M', 'F', 'Other'))
+    meals_perday = db.Column(db.Integer)
+    workout_days = db.Column(db.Integer)
+    preferences = db.Column(db.String(45))
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -39,40 +52,55 @@ class User(db.Model):
 
     def to_dict(self):
         return {
-            'id': self.id,
-            'firstName': self.first_name,
-            'lastName': self.last_name,
-            'email': self.email
+            "idUser": self.idUser,
+            "nom": self.nom,
+            "prenom": self.prenom,
+            "email": self.email,
+            "objectif": self.objectif,
+            "sexe": self.sexe
         }
 
-# Create database tables
+# Automatically create the table when the app starts
 with app.app_context():
-    db.create_all()
+    try:
+        db.create_all()
+        print("Database tables created successfully.")
+    except Exception as e:
+        print(f"Error creating database tables: {e}")
+
+@app.route('/test', methods=['GET'])
+def test():
+    return jsonify({'message': 'Flask server is running!'})
 
 @app.route('/register', methods=['POST'])
-def signup():
+def register():
     try:
         data = request.get_json()
-        
-        # Check if user already exists
+
         if User.query.filter_by(email=data['email']).first():
             return jsonify({'error': 'Email already registered'}), 400
 
-        # Create new user
-        new_user = User(
-            first_name=data['firstName'],
-            last_name=data['lastName'],
-            email=data['email']
+        user = User(
+            nom=data['nom'],
+            prenom=data['prenom'],
+            email=data['email'],
+            age=data.get('age'),
+            taille=data.get('taille'),
+            poids=data.get('poids'),
+            objectif=data.get('objectif'),
+            sexe=data.get('sexe'),
+            meals_perday=data.get('meals_perday'),
+            workout_days=data.get('workout_days'),
+            preferences=data.get('preferences')
         )
-        new_user.set_password(data['password'])
+        user.set_password(data['MotDePass'])
 
-        # Save to database
-        db.session.add(new_user)
+        db.session.add(user)
         db.session.commit()
 
         return jsonify({
             'message': 'User registered successfully',
-            'user': new_user.to_dict()
+            'user': user.to_dict()
         }), 201
 
     except Exception as e:
@@ -91,4 +119,4 @@ def get_users():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)
